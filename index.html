@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MVT Decoder</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+    />
+    <style>
+      :root {
+        --bg: #f7f7f8;
+        --panel: #ffffff;
+        --text: #1d1f23;
+        --muted: #646a73;
+        --border: #d9dce1;
+        --accent: #2563eb;
+        --accent-text: #ffffff;
+        --code-bg: #f1f3f5;
+        --error: #c62828;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #121417;
+          --panel: #1b1e23;
+          --text: #e6e8eb;
+          --muted: #9aa1ab;
+          --border: #30353d;
+          --accent: #4c8dff;
+          --accent-text: #0b0d10;
+          --code-bg: #15181c;
+          --error: #ff6b6b;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #121417;
+        --panel: #1b1e23;
+        --text: #e6e8eb;
+        --muted: #9aa1ab;
+        --border: #30353d;
+        --accent: #4c8dff;
+        --accent-text: #0b0d10;
+        --code-bg: #15181c;
+        --error: #ff6b6b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        display: grid;
+        grid-template-columns: minmax(340px, 480px) 1fr;
+        height: 100vh;
+      }
+      aside {
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin: 0 0 6px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      input,
+      textarea,
+      button {
+        font: inherit;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 7px 9px;
+        width: 100%;
+      }
+      textarea {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        min-height: 90px;
+        resize: vertical;
+      }
+      button {
+        background: var(--accent);
+        color: var(--accent-text);
+        border-color: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+        width: auto;
+        white-space: nowrap;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border-color: var(--border);
+        font-weight: 500;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: end;
+      }
+      .row > div {
+        flex: 1;
+        min-width: 0;
+      }
+      .zxy {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 4px 0 0;
+      }
+      #status {
+        font-size: 13px;
+        min-height: 1.2em;
+      }
+      #status.error {
+        color: var(--error);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 5px 6px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 6px;
+      }
+      details {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 6px;
+      }
+      summary {
+        cursor: pointer;
+        padding: 6px 9px;
+        font-weight: 500;
+      }
+      pre {
+        margin: 0;
+        padding: 9px;
+        background: var(--code-bg);
+        border-top: 1px solid var(--border);
+        font:
+          12px/1.4 ui-monospace,
+          Menlo,
+          monospace;
+        max-height: 360px;
+        overflow: auto;
+      }
+      #map {
+        height: 100%;
+      }
+      .maplibregl-popup-content {
+        color: #1d1f23;
+        font-size: 12px;
+        max-height: 260px;
+        overflow: auto;
+      }
+      .maplibregl-popup-content pre {
+        background: none;
+        border: 0;
+        padding: 0;
+        max-height: none;
+      }
+      @media (max-width: 800px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 60vh;
+          height: auto;
+        }
+        aside {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1>MVT Decoder</h1>
+
+      <section>
+        <h2>From URL</h2>
+        <div class="row">
+          <div>
+            <input
+              id="url"
+              type="url"
+              placeholder="https://example.com/tiles/{z}/{x}/{y}.pbf"
+            />
+          </div>
+          <button id="fetch">Fetch</button>
+        </div>
+        <p class="hint">
+          The server must allow CORS. z/x/y is read from the path when present.
+        </p>
+      </section>
+
+      <section>
+        <h2>From data</h2>
+        <label for="paste">Paste the tile as hex or base64</label>
+        <textarea
+          id="paste"
+          spellcheck="false"
+          placeholder="1a 8f 03 0a 05 77 61 74 65 72 …"
+        ></textarea>
+        <div class="row" style="margin-top: 8px">
+          <div>
+            <input
+              id="file"
+              type="file"
+              accept=".pbf,.mvt,.gz,application/octet-stream"
+            />
+          </div>
+          <button id="decode">Decode</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Tile coordinates</h2>
+        <div class="zxy">
+          <div>
+            <label for="z">z</label
+            ><input id="z" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="x">x</label
+            ><input id="x" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="y">y</label
+            ><input id="y" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <p class="hint">
+          Places the tile on the map. Decoding works without them.
+        </p>
+      </section>
+
+      <div id="status"></div>
+      <section id="summary" hidden></section>
+      <section id="layers" hidden></section>
+    </aside>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script type="module">
+      import { VectorTile } from "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/+esm";
+      import Pbf from "https://cdn.jsdelivr.net/npm/pbf@4.0.1/+esm";
+
+      const $ = (id) => document.getElementById(id);
+      const COLORS = [
+        "#e6194b",
+        "#3cb44b",
+        "#4363d8",
+        "#f58231",
+        "#911eb4",
+        "#42d4f4",
+        "#f032e6",
+        "#9a6324",
+        "#469990",
+        "#808000",
+      ];
+      const GEOM_TYPES = ["Unknown", "Point", "LineString", "Polygon"];
+
+      const map = new maplibregl.Map({
+        container: "map",
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: "raster",
+              tileSize: 256,
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              attribution:
+                '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            },
+          },
+          layers: [
+            {
+              id: "osm",
+              type: "raster",
+              source: "osm",
+              paint: { "raster-saturation": -0.8, "raster-opacity": 0.7 },
+            },
+          ],
+        },
+        center: [0, 20],
+        zoom: 1,
+      });
+      map.addControl(new maplibregl.NavigationControl());
+      const mapReady = new Promise((resolve) => map.on("load", resolve));
+      let mapIds = [];
+
+      function setStatus(msg, isError = false) {
+        $("status").textContent = msg;
+        $("status").className = isError ? "error" : "";
+      }
+
+      /** Parses pasted text as hex (spaces, commas, `0x` and `\x` prefixes allowed) or base64/base64url. */
+      function parseText(text) {
+        const hex = text.replace(/0x|\\x|[\s,]/gi, "");
+        if (/^[0-9a-f]+$/i.test(hex) && hex.length % 2 === 0) {
+          return Uint8Array.from(hex.match(/../g), (h) => parseInt(h, 16));
+        }
+        const b64 = text
+          .replace(/\s/g, "")
+          .replace(/-/g, "+")
+          .replace(/_/g, "/");
+        try {
+          return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        } catch {
+          throw new Error("Pasted data is neither hex nor base64.");
+        }
+      }
+
+      async function gunzipIfNeeded(bytes) {
+        if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+        const stream = new Blob([bytes])
+          .stream()
+          .pipeThrough(new DecompressionStream("gzip"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      function readZxy() {
+        const [z, x, y] = ["z", "x", "y"].map((k) => parseInt($(k).value, 10));
+        if ([z, x, y].some(Number.isNaN)) return null;
+        const n = 2 ** z;
+        if (z < 0 || x < 0 || y < 0 || x >= n || y >= n)
+          throw new Error(`Tile ${z}/${x}/${y} is out of range.`);
+        return { z, x, y };
+      }
+
+      function tileBounds({ z, x, y }) {
+        const n = 2 ** z;
+        const lon = (i) => (i / n) * 360 - 180;
+        const lat = (j) =>
+          (Math.atan(Math.sinh(Math.PI * (1 - (2 * j) / n))) * 180) / Math.PI;
+        return [
+          [lon(x), lat(y + 1)],
+          [lon(x + 1), lat(y)],
+        ];
+      }
+
+      const escapeHtml = (s) =>
+        String(s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+
+      async function decode(bytes) {
+        bytes = await gunzipIfNeeded(bytes);
+        const tile = new VectorTile(new Pbf(bytes));
+        const zxy = readZxy();
+        const names = Object.keys(tile.layers);
+
+        const layers = names.map((name, i) => {
+          const layer = tile.layers[name];
+          const features = [];
+          const geojson = [];
+          for (let j = 0; j < layer.length; j++) {
+            const f = layer.feature(j);
+            features.push({
+              id: f.id,
+              type: GEOM_TYPES[f.type],
+              properties: f.properties,
+              geometry: f.loadGeometry(),
+            });
+            if (zxy && f.type !== 0)
+              geojson.push(f.toGeoJSON(zxy.x, zxy.y, zxy.z));
+          }
+          return {
+            name,
+            color: COLORS[i % COLORS.length],
+            version: layer.version,
+            extent: layer.extent,
+            features,
+            geojson,
+          };
+        });
+
+        renderSummary(layers);
+        await renderMap(layers, zxy);
+        setStatus(
+          `Decoded ${names.length} layer(s), ${bytes.length.toLocaleString()} bytes.` +
+            (zxy ? "" : " Set z/x/y to show it on the map."),
+        );
+      }
+
+      function renderSummary(layers) {
+        const counts = (l) => {
+          const c = {};
+          for (const f of l.features) c[f.type] = (c[f.type] || 0) + 1;
+          return Object.entries(c)
+            .map(([t, n]) => `${t} ${n}`)
+            .join(", ");
+        };
+        $("summary").hidden = false;
+        $("summary").innerHTML = `<h2>Layers</h2><table>
+    <tr><th>Layer</th><th>Features</th><th>Geometry</th><th>Extent</th><th>v</th></tr>
+    ${layers
+      .map(
+        (l) => `<tr>
+      <td><span class="swatch" style="background:${l.color}"></span>${escapeHtml(l.name)}</td>
+      <td class="num">${l.features.length}</td><td>${counts(l)}</td>
+      <td class="num">${l.extent}</td><td class="num">${l.version}</td></tr>`,
+      )
+      .join("")}
+  </table>`;
+
+        $("layers").hidden = false;
+        $("layers").innerHTML = "<h2>Features (tile coordinates)</h2>";
+        for (const l of layers) {
+          const d = document.createElement("details");
+          d.innerHTML = `<summary>${escapeHtml(l.name)} (${l.features.length})</summary><pre></pre>`;
+          // Stringify on open: large tiles would otherwise block the page.
+          d.addEventListener(
+            "toggle",
+            () => {
+              const pre = d.querySelector("pre");
+              if (d.open && !pre.textContent)
+                pre.textContent = JSON.stringify(l.features, null, 1);
+            },
+            { once: true },
+          );
+          $("layers").append(d);
+        }
+      }
+
+      async function renderMap(layers, zxy) {
+        await mapReady;
+        for (const id of mapIds) if (map.getLayer(id)) map.removeLayer(id);
+        for (const id of mapIds) if (map.getSource(id)) map.removeSource(id);
+        mapIds = [];
+        if (!zxy) return;
+
+        const bounds = tileBounds(zxy);
+        const [[w, s], [e, n]] = bounds;
+        map.addSource("tile-bounds", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [w, s],
+                [e, s],
+                [e, n],
+                [w, n],
+                [w, s],
+              ],
+            },
+          },
+        });
+        map.addLayer({
+          id: "tile-bounds",
+          type: "line",
+          source: "tile-bounds",
+          paint: { "line-color": "#888", "line-dasharray": [2, 2] },
+        });
+        mapIds.push("tile-bounds");
+
+        layers.forEach((l, i) => {
+          const src = `mvt-${i}`;
+          map.addSource(src, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: l.geojson },
+          });
+          const isType = (...types) => [
+            "in",
+            ["geometry-type"],
+            ["literal", types],
+          ];
+          const defs = [
+            {
+              id: `${src}-fill`,
+              type: "fill",
+              filter: isType("Polygon", "MultiPolygon"),
+              paint: { "fill-color": l.color, "fill-opacity": 0.3 },
+            },
+            {
+              id: `${src}-line`,
+              type: "line",
+              filter: isType(
+                "Polygon",
+                "MultiPolygon",
+                "LineString",
+                "MultiLineString",
+              ),
+              paint: { "line-color": l.color, "line-width": 1.5 },
+            },
+            {
+              id: `${src}-point`,
+              type: "circle",
+              filter: isType("Point", "MultiPoint"),
+              paint: {
+                "circle-color": l.color,
+                "circle-radius": 4,
+                "circle-stroke-color": "#fff",
+                "circle-stroke-width": 1,
+              },
+            },
+          ];
+          for (const def of defs) {
+            map.addLayer({
+              ...def,
+              source: src,
+              metadata: { mvtLayer: l.name },
+            });
+            mapIds.push(def.id);
+          }
+          mapIds.push(src);
+        });
+        map.fitBounds(bounds, { padding: 40, duration: 0 });
+      }
+
+      map.on("click", (e) => {
+        const hits = map.queryRenderedFeatures(e.point, {
+          layers: mapIds.filter(
+            (id) => id.startsWith("mvt-") && map.getLayer(id),
+          ),
+        });
+        if (!hits.length) return;
+        const f = hits[0];
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<strong>${escapeHtml(f.layer.metadata.mvtLayer)}</strong><pre>${escapeHtml(JSON.stringify(f.properties, null, 1))}</pre>`,
+          )
+          .addTo(map);
+      });
+      map.on("mousemove", (e) => {
+        const ids = mapIds.filter(
+          (id) => id.startsWith("mvt-") && map.getLayer(id),
+        );
+        map.getCanvas().style.cursor =
+          ids.length &&
+          map.queryRenderedFeatures(e.point, { layers: ids }).length
+            ? "pointer"
+            : "";
+      });
+
+      async function run(getBytes) {
+        try {
+          setStatus("Decoding…");
+          await decode(await getBytes());
+        } catch (err) {
+          setStatus(err.message || String(err), true);
+        }
+      }
+
+      async function fetchUrl() {
+        const url = $("url").value.trim();
+        if (!url) throw new Error("Enter a tile URL.");
+        const m = new URL(url).pathname.match(/\/(\d+)\/(\d+)\/(\d+)(\.\w+)*$/);
+        if (m) [$("z").value, $("x").value, $("y").value] = m.slice(1, 4);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        const params = new URLSearchParams(location.search);
+        params.set("url", url);
+        history.replaceState(null, "", `?${params}`);
+        return new Uint8Array(await res.arrayBuffer());
+      }
+
+      $("fetch").addEventListener("click", () => run(fetchUrl));
+      $("url").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") run(fetchUrl);
+      });
+      $("decode").addEventListener("click", () =>
+        run(async () => {
+          const file = $("file").files[0];
+          if (file) return new Uint8Array(await file.arrayBuffer());
+          const text = $("paste").value.trim();
+          if (!text) throw new Error("Paste tile data or choose a file.");
+          return parseText(text);
+        }),
+      );
+      $("file").addEventListener("change", () => {
+        if ($("file").files[0]) $("decode").click();
+      });
+      $("paste").addEventListener("input", () => {
+        $("file").value = "";
+      });
+
+      const initialUrl = new URLSearchParams(location.search).get("url");
+      if (initialUrl) {
+        $("url").value = initialUrl;
+        run(fetchUrl);
+      } else {
+        $("url").value = "https://demotiles.maplibre.org/tiles/2/2/1.pbf";
+      }
+    </script>
+  </body>
+</html>
